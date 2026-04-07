@@ -1,28 +1,30 @@
 import 'package:PiliPlus/common/widgets/dialog/dialog.dart';
 import 'package:PiliPlus/models_new/download/bili_download_entry_info.dart';
-import 'package:PiliPlus/models_new/download/download_collection.dart';
 import 'package:PiliPlus/pages/common/multi_select/base.dart'
     show BaseMultiSelectMixin;
 import 'package:PiliPlus/services/download/download_collection_service.dart';
 import 'package:PiliPlus/services/download/download_service.dart';
-import 'package:PiliPlus/utils/storage.dart';
 import 'package:flutter/widgets.dart' show Text;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 
-class DownloadPageController extends GetxController
+class DownloadFolderDetailController extends GetxController
     with BaseMultiSelectMixin<BiliDownloadEntryInfo> {
+  DownloadFolderDetailController(this.folderId);
+
+  final String folderId;
+
   final downloadService = Get.find<DownloadService>();
   final collectionService = Get.find<DownloadCollectionService>();
 
-  final allVideos = RxList<BiliDownloadEntryInfo>();
-  final folders = RxList<DownloadFolder>();
+  final entries = RxList<BiliDownloadEntryInfo>();
+  final title = ''.obs;
 
   @override
-  List<BiliDownloadEntryInfo> get list => allVideos;
+  List<BiliDownloadEntryInfo> get list => entries;
 
   @override
-  RxList<BiliDownloadEntryInfo> get state => allVideos;
+  RxList<BiliDownloadEntryInfo> get state => entries;
 
   @override
   void onInit() {
@@ -45,34 +47,26 @@ class DownloadPageController extends GetxController
     if (isClosed) {
       return;
     }
-    allVideos.value = collectionService.resolveAllEntries();
-    folders.value = collectionService.folders;
+    final folder = collectionService.getFolder(folderId);
+    title.value = folder?.title ?? '';
+    entries.value = collectionService.resolveFolderEntries(folderId);
     rxCount.value = allChecked.length;
     if (checkedCount == 0) {
       enableMultiSelect.value = false;
     }
   }
 
-  List<BiliDownloadEntryInfo> resolveFolderEntries(String folderId) =>
-      collectionService.resolveFolderEntries(folderId);
-
   @override
   void onRemove() {
     showConfirmDialog(
       context: Get.context!,
-      title: const Text('确定删除选中视频？'),
+      title: const Text('确定移出当前文件夹？'),
       onConfirm: () async {
         SmartDialog.showLoading();
-        final selected = allChecked.toSet();
-        for (final entry in selected) {
-          await GStorage.watchProgress.delete(entry.cid.toString());
-          await downloadService.deleteDownload(
-            entry: entry,
-            removeList: true,
-            refresh: false,
-          );
-        }
-        downloadService.flagNotifier.refresh();
+        await collectionService.removeVideosFromFolder(
+          folderId,
+          allChecked.map((item) => item.cid),
+        );
         handleSelect();
         SmartDialog.dismiss();
       },
