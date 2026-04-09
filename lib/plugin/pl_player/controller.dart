@@ -985,6 +985,11 @@ class PlPlayerController with BlockConfigMixin {
       debugPrint('[PlPlayer][DIAG] Opening video: $video, extras: $extras');
     }
 
+    // 记录传递给 player.open() 的 extras，便于诊断旧版 mpv 兼容性问题
+    if (extras.isNotEmpty) {
+      Utils.reportError('[DIAG][open] extras keys: ${extras.keys.join(", ")}');
+    }
+
     await player.open(
       Media(
         video,
@@ -993,6 +998,18 @@ class PlPlayerController with BlockConfigMixin {
       ),
       play: false,
     );
+
+    // 旧版 libmpv（如部分 armeabi-v7a Android TV 设备）在 loadfile replace 模式下会清除 audio-files 设置
+    // 因此在 open() 之后再次通过 change-list 重新设置 audio-files，确保旧版 mpv 也能正确加载音频流
+    if (dataSource.audioSource case final audio? when (audio.isNotEmpty && !onlyPlayAudio.value)) {
+      try {
+        await player.command(['change-list', 'audio-files', 'clr', '']);
+        await player.command(['change-list', 'audio-files', 'set', audio]);
+        Utils.reportError('[DIAG][audio-files] post-open change-list succeeded');
+      } catch (e, st) {
+        Utils.reportError('[DIAG][audio-files] post-open change-list failed: $e', st);
+      }
+    }
   }
 
   Future<void>? refreshPlayer() {
@@ -1178,6 +1195,12 @@ class PlPlayerController with BlockConfigMixin {
               event.startsWith("Failed to open .") ||
               event.startsWith("Cannot open") ||
               event.startsWith("Can not open")) {
+            return;
+          }
+          // 旧版 libmpv（如部分 armeabi-v7a Android TV 设备）在 loadfile 传递 options 参数时
+          // 会产生 "invalid parameter" 错误，这是已知的兼容性问题，不影响通过 change-list 预设的 audio-files
+          if (event == 'invalid parameter') {
+            Utils.reportError('[COMPAT][stream.error] invalid parameter (likely old mpv loadfile options compat issue, audio loaded via change-list)');
             return;
           }
           Utils.reportError(event);
