@@ -930,11 +930,12 @@ class PlPlayerController with BlockConfigMixin {
         // Android 上旧版 libmpv（如部分 Android TV armeabi-v7a 设备）不支持 loadfile 的 options 参数，
         // 传入 extras 会导致整个 loadfile 命令失败（视频和音频都无法加载）。
         // 因此 Android 上不使用 extras 传递 audio-files，改为通过 change-list 命令方式（pre-open + post-open 双重保障）。
+        // 注意：change-list 对 audio-files 属性值的 URL 中的冒号同样需要转义（旧版 mpv 会将冒号解析为 key:value 分隔符）
         if (!Platform.isAndroid) {
           extras['audio-files'] = '"$escapedAudio"';
         }
         await player.command(['change-list', 'audio-files', 'clr', '']);
-        await player.command(['change-list', 'audio-files', 'set', audio]);
+        await player.command(['change-list', 'audio-files', 'set', escapedAudio]);
       }
       if (kDebugMode || Platform.isAndroid) {
         String audioNormalization = AudioNormalization.getParamFromConfig(
@@ -983,11 +984,13 @@ class PlPlayerController with BlockConfigMixin {
     );
 
     // 旧版 libmpv（如部分 armeabi-v7a Android TV 设备）的 loadfile replace 命令会清除 audio-files 属性，
-    // 因此在 player.open() 之后再次通过 change-list 重新设置，确保旧版 mpv 也能正确加载独立音频流
+    // 因此在 player.open() 之后再次通过 change-list 重新设置，确保旧版 mpv 也能正确加载独立音频流。
+    // 注意：URL 中的冒号需要转义（旧版 mpv change-list 会将未转义的冒号解析为 key:value 分隔符）
     if (Platform.isAndroid) {
       if (dataSource.audioSource case final audio? when (audio.isNotEmpty && !onlyPlayAudio.value)) {
+        final ea = audio.replaceAll(':', r'\:');
         await player.command(['change-list', 'audio-files', 'clr', '']);
-        await player.command(['change-list', 'audio-files', 'set', audio]);
+        await player.command(['change-list', 'audio-files', 'set', ea]);
       }
     }
   }
@@ -1002,11 +1005,13 @@ class PlPlayerController with BlockConfigMixin {
         play: true,
       );
       // Android 上需要在 open() 后重新设置 audio-files（旧版 mpv loadfile replace 会清除该属性）
+      // URL 中的冒号需要转义（旧版 mpv change-list 会将未转义的冒号解析为 key:value 分隔符）
       if (Platform.isAndroid) {
         if (dataSource.audioSource case final audio? when (audio.isNotEmpty && !onlyPlayAudio.value)) {
+          final ea = audio.replaceAll(':', r'\:');
           return future.then((_) async {
             await _videoPlayerController?.command(['change-list', 'audio-files', 'clr', '']);
-            await _videoPlayerController?.command(['change-list', 'audio-files', 'set', audio]);
+            await _videoPlayerController?.command(['change-list', 'audio-files', 'set', ea]);
           });
         }
       }
