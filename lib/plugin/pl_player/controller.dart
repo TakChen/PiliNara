@@ -1126,13 +1126,6 @@ class PlPlayerController with BlockConfigMixin {
       if (kDebugMode)
         stream.log.listen(((PlayerLog log) {
           if (log.level == 'error' || log.level == 'fatal') {
-            // 过滤旧版 libmpv（如部分 Android TV 设备）不支持 loadfile options 参数时产生的兼容性日志
-            // 这些错误不影响应用逻辑，仅表明该设备 MPV 版本较旧
-            if (log.prefix == 'main' &&
-                (log.text.startsWith('The loadfile option must be an integer:') ||
-                    log.text.startsWith('Command loadfile: argument index can\'t be parsed'))) {
-              return;
-            }
             Utils.reportError('${log.level}: ${log.prefix}: ${log.text}', null);
           } else {
             debugPrint(log.toString());
@@ -1184,11 +1177,6 @@ class PlPlayerController with BlockConfigMixin {
               event.startsWith("Failed to open .") ||
               event.startsWith("Cannot open") ||
               event.startsWith("Can not open")) {
-            return;
-          }
-          // 旧版 libmpv（如部分 armeabi-v7a Android TV 设备）在 loadfile 传递 options 参数时
-          // 会产生 "invalid parameter" 错误，这是已知的兼容性问题，已通过 change-list 方式规避
-          if (event == 'invalid parameter') {
             return;
           }
           Utils.reportError(event);
